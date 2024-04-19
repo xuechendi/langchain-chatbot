@@ -16,7 +16,7 @@ class Basic:
         self.history_messages = utils.enable_chat_history('basic_chat')
     
     def setup_chain(self):
-        llm = ChatOpenAI(openai_api_base = "http://localhost:8000/v1", model_name=self.openai_model, openai_api_key="not_needed", streaming=True, max_tokens=512)
+        llm = ChatOpenAI(openai_api_base = "http://10.0.2.14:8000/v1", model_name=self.openai_model, openai_api_key="not_needed", streaming=True, max_tokens=512)
         chain = ConversationChain(llm=llm, verbose=True)
         return chain
     

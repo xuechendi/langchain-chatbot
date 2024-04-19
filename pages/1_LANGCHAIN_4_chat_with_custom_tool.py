@@ -6,6 +6,8 @@ from langchain.chat_models import ChatOpenAI
 from langchain.tools import DuckDuckGoSearchRun
 from langchain.agents import initialize_agent, Tool
 from langchain.callbacks import StreamlitCallbackHandler
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain import hub
     
 st.set_page_config(page_title="ChatWeb", page_icon="🌐")
 st.header('Chatbot with AI Agent & Custom Tool')
@@ -22,7 +24,7 @@ def get_current_weather(location, unit):
         "location": location,
         "temperature": "78",
         "unit": unit,
-        "forecast": ["sunny", "with a chance of meatballs"],
+        "forecast": ["sunny", "with a chance of rain"],
     }
     return weather_info
 
@@ -59,42 +61,23 @@ class ChatbotTools:
         self.openai_model = "mistral-7b-instruct-v0.2"
         self.history_messages = utils.enable_chat_history('custom_tool_chat')
 
-    def setup_agent(self):
-        # Define tool
-        ddg_search = GetCurrentWeatherTool()
-        tools = [
-            Tool(
-                name=ddg_search.name,
-                func=ddg_search.run,
-                description=ddg_search.description,
-            )
-        ]
-        
-        # Setup LLM and Agent
-        llm = ChatOpenAI(openai_api_base = "http://localhost:8000/v1", model_name=self.openai_model, openai_api_key="not_needed", streaming=True, max_tokens=512,)
-        agent = initialize_agent(
-            tools=tools,
-            llm=llm,
-            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-            handle_parsing_errors=True,
-            #verbose=True
-        )
-        return agent
-
     def main(self):
         for message in self.history_messages: # Display the prior chat messages
             with st.chat_message(message["role"]):
                 st.write(message["content"])
-        agent = self.setup_agent()
+        tools = [GetCurrentWeatherTool()]
+        llm = ChatOpenAI(openai_api_base = "http://localhost:8000/v1", model_name=self.openai_model, openai_api_key="not_needed", streaming=True, max_tokens=512,)
+        agent = create_openai_tools_agent(tools=tools, llm=llm, prompt=hub.pull("hwchase17/openai-tools-agent"))
+        agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
         if user_query := st.chat_input(placeholder="What is the weather in Autin, Texas?"):
             self.history_messages.append({"role": "user", "content": user_query})
             with st.chat_message('user'):
                 st.write(user_query)
             with st.chat_message("assistant"):
-                st_cb = StreamlitCallbackHandler(st.container())
-                response = agent.run(user_query, callbacks=[st_cb])
-                self.history_messages.append({"role": "assistant", "content": response})
-                st.write(response)
+                st_callback = StreamlitCallbackHandler(st.container())
+                response = agent_executor.invoke({"input": user_query}, {"callbacks": [st_callback]})
+                self.history_messages.append({"role": "assistant", "content": response['output']})
+                st.write(response['output'])
 
 if __name__ == "__main__":
     obj = ChatbotTools()
